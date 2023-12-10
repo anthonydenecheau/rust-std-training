@@ -1,0 +1,38 @@
+[package]
+name = "http-server-led"
+version = "0.1.0"
+authors = [
+    "Anthony <anthony.denecheau@gmail.com>",
+]
+edition = "2021"
+resolver = "2"
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true    # Symbols are nice and they don't increase the size on Flash
+opt-level = "z"
+
+[features]
+default = ["native"]
+native = ["esp-idf-sys/native"]
+
+[dependencies]
+anyhow = "=1.0.71"
+embedded-svc = "=0.25.0"
+esp-idf-hal = "=0.41.1"
+esp-idf-svc = { version = "0.46.0", features = ["experimental", "alloc"] }
+esp-idf-sys = { version = "=0.33.0", features = ["binstart"] }
+shtcx = "=0.11.0"
+toml-cfg = "=0.1.3"
+rgb-led = { path = "../../common/lib/rgb-led" }
+wifi = { path = "../../common/lib/wifi" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+#serde-json-core = { version = "0.5.1" }
+
+[build-dependencies]
+anyhow = "=1.0.71"
+embuild = "=0.31.2"
+toml-cfg = "=0.1.3"

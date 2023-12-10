@@ -15,7 +15,7 @@ impl<'d> WS2812RMT<'d> {
     // Rust ESP Board gpio2,  ESP32-C3-DevKitC-02 gpio8
     pub fn new(
         led: impl Peripheral<P = impl OutputPin> + 'd,
-       channel: impl Peripheral<P = impl RmtChannel> + 'd,
+        channel: impl Peripheral<P = impl RmtChannel> + 'd,
     )-> Result<Self> {
         let config = TransmitConfig::new().clock_divider(2);
         let tx = TxRmtDriver::new(channel, led, &config)?;

@@ -59,19 +59,40 @@ fn main() -> Result<()> {
         .start_measurement(PowerMode::NormalMode)
         .unwrap();
 
-    // 1.Create a `EspHttpServer` instance using a default configuration
-    // let mut server = EspHttpServer::new(...)?;
+    // Set the HTTP server
+    let mut server = EspHttpServer::new(&Configuration::default())?;
+    // http://<sta ip>/ handler
+    server.fn_handler("/", Method::Get, |request| {
+        let html = index_html();
+        let mut response = request.into_ok_response()?;
+        response.write_all(html.as_bytes())?;
+        Ok(())
+    })?;
 
-    // 2. Write a handler that returns the index page
-    // server.fn_handler("/", Method::Get, |request| {
-    // ...
-    //})?;
+    // http://<sta ip>/temperature handler
+    server.fn_handler("/temperature", Method::Get, move |request| {
+        let temp_val = temp_sensor
+            .lock()
+            .unwrap()
+            .get_measurement_result()
+            .unwrap()
+            .temperature
+            .as_degrees_celsius();
+        let html = temperature(temp_val);
+        let mut response = request.into_ok_response()?;
+        response.write_all(html.as_bytes())?;
+        Ok(())
+    })?;
 
-    // This is not true until you actually create one
     println!("Server awaiting connection");
 
     // Prevent program from exiting
     loop {
+        temp_sensor_main
+            .lock()
+            .unwrap()
+            .start_measurement(PowerMode::NormalMode)
+            .unwrap();
         sleep(Duration::from_millis(1000));
     }
 }

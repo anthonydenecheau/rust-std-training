@@ -36,6 +36,10 @@
     }
   },
   "remoteUser": "esp",
+  "privileged": true,
+  "runArgs": [
+    "--device=/dev/bus/usb"
+  ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
   "workspaceFolder": "/workspace"
 }
