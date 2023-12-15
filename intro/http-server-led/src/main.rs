@@ -14,10 +14,8 @@ use std::{
     sync::{Arc, Mutex},
     thread::sleep,
     time::Duration,
-    sync::atomic::{AtomicBool, Ordering},
-//    ffi::c_void,
+    sync::atomic::{AtomicU8, AtomicU32, AtomicBool, Ordering},
 };
-use std::sync::mpsc;
 use std::thread;
 use rgb_led::{RGB8, WS2812RMT};
 use wifi::wifi;
@@ -38,13 +36,21 @@ pub struct Config {
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-struct UserSettings {
+pub struct UserSettings {
     red: u8,
     blue: u8,
     green: u8,
     mode: bool,
     delay :u32,
+    transition: bool,
 }
+
+static RED: AtomicU8 =  AtomicU8::new(255);
+static GREEN: AtomicU8 =  AtomicU8::new(0);
+static BLUE: AtomicU8 =  AtomicU8::new(0);
+static MODE_FLASH_LED: AtomicBool =  AtomicBool::new(true);
+static DELAY_FLASH_LED: AtomicU32 =  AtomicU32::new(2000);
+static MODE_TRANSITION_LED: AtomicBool =  AtomicBool::new(false);
 
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();
@@ -64,24 +70,6 @@ fn main() -> Result<()> {
         sysloop,
     )?;
 
-    /*
-    let user_settings = UserSettings {
-       red: 50,
-       blue: 50,
-       green: 0,
-       mode: false,
-       delay: 0,
-   };
-
-    // Serialize the UserRequest instance to a JSON string
-    let json_string =  serde_json::to_string(&user_settings).unwrap();
-    println!("Serialized JSON string: {}", json_string);
-
-    // Deserialize the JSON string back into a Person instance
-    let _settings: UserSettings = serde_json::from_str(&json_string).unwrap();
-    println!("Deserialized Person instance: {:?}", _settings);
-    */
-
     // Start the LED off yellow
     let led = WS2812RMT::new(peripherals.pins.gpio2, peripherals.rmt.channel0)?;
     let led_main = Arc::new(Mutex::new(led));
@@ -90,8 +78,6 @@ fn main() -> Result<()> {
 
     // Set the HTTP server
     let mut server = EspHttpServer::new(&Configuration::default())?;
-
-    let should_stop = Arc::new(AtomicBool::new(false));
 
     // http://<sta ip>/ handler
     server.fn_handler("/", Method::Get, |request| {
@@ -116,29 +102,17 @@ fn main() -> Result<()> {
         let mut resp = request.into_ok_response()?;
         if let Ok(form) = serde_json::from_slice::<UserSettings>(&buf) {
 
-            should_stop.store(false, Ordering::Relaxed);
-            //let running = Arc::new(Mutex::new(form.mode));
+            MODE_FLASH_LED.store(form.mode, Ordering::Relaxed);
+            MODE_TRANSITION_LED.store(form.transition, Ordering::Relaxed);
+            RED.store(form.red, Ordering::Relaxed);
+            GREEN.store(form.green, Ordering::Relaxed);
+            BLUE.store(form.blue, Ordering::Relaxed);
+            DELAY_FLASH_LED.store(form.delay, Ordering::Relaxed);
 
-            let (tx, rx) = mpsc::channel();
-            
-            let handle = thread::spawn({
-                let _running = should_stop.clone();
-                let _my_led = temp_led.clone();
-                let _my_struct = form.clone();
-                move || {
-                    tx.send("Done").unwrap();
-                    //while !thread_should_stop.load(Ordering::Relaxed) {
-                    //    led_task(_my_led, _my_struct/*, _running*/);                                                
-                    //}
-                }
-            });
-            handle.join().unwrap();
-            let _result = rx.recv().unwrap();
-            //*running.lock().unwrap() = false;
             write!(
                 resp,
-                "{}, red {}-blue {}-green {}!",
-                _result, form.red, form.blue, form.green
+                "Update > red {}-green {}-blue {}!",
+                 form.red, form.green, form.blue
             )?;
         } else {
             resp.write_all("JSON error".as_bytes())?;
@@ -147,30 +121,14 @@ fn main() -> Result<()> {
         Ok(())
     })?;
 
-    /*
-    server.fn_handler("/color", Method::Post, move |mut request| {
-        let mut buffer = [0_u8; 11]; // ex: 245,16,32
-        let bytes_read = request.read(&mut buffer).unwrap();
-        let input = str::from_utf8(&buffer[0..bytes_read]).unwrap();
-        println!("Color {}",input);
-
-        let values: Vec<&str> =input.split(",").collect();
-        println!("red {}",values[0]);
-        println!("green {}",values[1]);
-        println!("blue {}",values[2]);
-        let red: u8 = values[0].parse().unwrap();
-        let green: u8 = values[1].parse().unwrap();
-        let blue: u8 = values[2].parse().unwrap();
-        let _temp_val = temp_led
-            .lock()
-            .unwrap()
-            .set_pixel(RGB8::new(red, green, blue))
-            .unwrap();
-        Ok(())
-    })?;
-    */
-
     println!("Server awaiting connection");
+
+    let handle = thread::spawn({
+    move || {
+        led_task(temp_led);                                                
+        }
+    });
+    handle.join().unwrap();
 
     // Prevent program from exiting
     loop {
@@ -178,62 +136,76 @@ fn main() -> Result<()> {
     }
 }
 
+fn led_task(led: Arc<Mutex<WS2812RMT<'_>>>) {
 
-/*
-fn led_task(led: *mut c_void, data: *mut c_void) {
-    let my_struct = unsafe { &mut *(data as *mut UserSettings) };
-    let my_led = unsafe { &mut *(led as *mut Arc<Mutex<WS2812RMT<'_>>>) };
-    loop {
-        FreeRtos::delay_ms(my_struct.delay);
-        println!("led task loop ...");
-        let _led = my_led
-        .lock()
-        .unwrap()
-        .set_pixel(RGB8::new(
-            my_struct.red
-            , my_struct.green
-            , my_struct.blue))
-        .unwrap();
-    }
-}
- */
-//fn led_task(led: Arc<Mutex<WS2812RMT<'_>>>, data: UserSettings, running: Arc<Mutex<bool>>) {
-fn led_task(led: Arc<Mutex<WS2812RMT<'_>>>, data: UserSettings/*, running: Arc<std::sync::atomic::AtomicBool>*/) {
     let ws2812 = led.clone();
-    if data.mode {
-        loop {
-            ws2812
-            .lock()
-            .unwrap()
-            .set_pixel(RGB8::new(
-                0
-                , 0
-                , 0))
-            .unwrap();
-            FreeRtos::delay_ms(data.delay);
-            println!("led task loop ...");
-            ws2812
-            .lock()
-            .unwrap()
-            .set_pixel(RGB8::new(
-                data.red
-                , data.green
-                , data.blue))
-            .unwrap();
-            FreeRtos::delay_ms(data.delay);
-            //if !*running.lock().unwrap() {
-            //    break;
-            //}
-        }
-    } else {
-        ws2812
-        .lock()
-        .unwrap()
-        .set_pixel(RGB8::new(
-            data.red
-            , data.green
-            , data.blue))
-        .unwrap();
+    loop {
+        if MODE_FLASH_LED.load(Ordering::Relaxed) {
+            loop {
+                println!("led_task > flashing r {} g {} b {}",RED.load(Ordering::Relaxed),GREEN.load(Ordering::Relaxed),BLUE.load(Ordering::Relaxed));
+                if !MODE_FLASH_LED.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                ws2812
+                .lock()
+                .unwrap()
+                .set_pixel(RGB8::new(
+                    0
+                    , 0
+                    , 0))
+                .unwrap();
+                FreeRtos::delay_ms(DELAY_FLASH_LED.load(Ordering::Relaxed));
+                ws2812
+                .lock()
+                .unwrap()
+                .set_pixel(RGB8::new(
+                    RED.load(Ordering::Relaxed)
+                    ,GREEN.load(Ordering::Relaxed)
+                    , BLUE.load(Ordering::Relaxed)))
+                .unwrap();
+                FreeRtos::delay_ms(DELAY_FLASH_LED.load(Ordering::Relaxed));
+            }
+        } else if MODE_TRANSITION_LED.load(Ordering::Relaxed) {
+                let mut r = 255;
+                let mut g = 0;
+                let mut b = 0;                
+                for i in 0..255 {
+
+                    if i < 85 {
+                        r -= 1;
+                        g += 1;
+                    } else if i < 170 {
+                        g -= 1;
+                        b += 1;
+                    } else {
+                        r += 1;
+                        b -= 1;
+                    }
+
+                    println!("led_task > r {} g {} b {}",r, g, b);
+                    FreeRtos::delay_ms(DELAY_FLASH_LED.load(Ordering::Relaxed));
+                    ws2812
+                    .lock()
+                    .unwrap()
+                    .set_pixel(RGB8::new(
+                        r
+                        , g
+                        , b))
+                    .unwrap();
+                }                
+            } else {
+                println!("led_task > r {} g {} b {}",RED.load(Ordering::Relaxed),GREEN.load(Ordering::Relaxed),BLUE.load(Ordering::Relaxed));
+                ws2812
+                .lock()
+                .unwrap()
+                .set_pixel(RGB8::new(
+                    RED.load(Ordering::Relaxed)
+                    , GREEN.load(Ordering::Relaxed)
+                    , BLUE.load(Ordering::Relaxed)))
+                .unwrap();
+            }
+        sleep(Duration::from_millis(1000));
     }
 }
 
