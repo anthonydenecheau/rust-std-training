@@ -22,7 +22,6 @@ use wifi::wifi;
 // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
 use esp_idf_sys as _;
 use serde::{Deserialize, Serialize};
-//use serde_json_core::*;
 
 // Max payload length
 const MAX_LEN: usize = 128;
@@ -214,34 +213,117 @@ fn templated(content: impl AsRef<str>) -> String {
         r#"
 <html>
     <head>
+        <!-- Required meta tags -->
         <meta charset='utf-8'>
-        <title>esp-rs web server</title>
+        <meta name='viewport' content='width=device-width, initial-scale=1'>
+
+        <!-- Bootstrap CSS -->
+        <link href='https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css' rel='stylesheet' integrity='sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC' crossorigin='anonymous'>
         <script src='https://cdn.jsdelivr.net/npm/@jaames/iro@5'></script>
+
+        <title>http-led server</title>
+
     </head>
-    <body>
-        {}
-        <div id='picker'></div>
+    <body>        
+        <div class='container-fluid'>
+            <div class='row'>
+                <div class='col'>
+                    <h3>{}</h3>    
+                    <div id='picker'></div>
+                </div>
+                <div class='col'>
+                    <h3>&nbsp;</h3>
+                    <form class='row g-3'>
+                        <div class='col-md-4'>
+                            <label for='red' class='form-label'>R</label>
+                            <input type='text' class='form-control' id='red'>
+                        </div>
+                        <div class='col-md-4'>
+                            <label for='green' class='form-label'>G</label>
+                            <input type='text' class='form-control' id='green'>
+                        </div>
+                        <div class='col-md-4'>
+                            <label for='blue' class='form-label'>B</label>
+                            <input type='text' class='form-control' id='blue'>
+                        </div>
+                        <div class='col-md-4'>
+                            <label for='delai' class='form-label'>Delai</label>
+                            <input type='text' class='form-control' id='delai' value='500'>
+                        </div>
+                        <div class='col-md-8'>&nbsp;</div>
+                        <div class='col-md-12'>
+                            <div class='form-check form-switch'>
+                                <input class='form-check-input' type='checkbox' id='flash' checked>
+                                <label class='form-check-label' for='flash'>Mode Flash</label>
+                            </div>
+                        </div>
+                        <div class='col-md-12'>
+                            <div class='form-check form-switch'>
+                                <input class='form-check-input' type='checkbox' id='transition'>
+                                <label class='form-check-label' for='transition'>Mode Transition</label>
+                            </div>
+                        </div>
+                        <div class='col-12'>
+                          <button type='button' id='btnUpdateSettings' class='btn btn-primary'>Update</button>
+                        </div>
+                      </form>                    
+
+                    </div>
+            </div>
+        </div>
+
+        <script src='https://code.jquery.com/jquery-3.7.1.slim.min.js' integrity='sha256-kmHvs0B+OpCW5GVHUNjv9rOmY0IvSIRcf7zGUDTDQM8=' crossorigin='anonymous'></script>            
         <script>
+            $('#red').val('255');
+            $('#green').val('0');
+            $('#blue').val('0');
+
 	        var colorPicker = new iro.ColorPicker('#picker', {{width:320,color: '#f00'}});
 	        colorPicker.on('color:change', function(color) {{
-                // log the current color as a HEX string
-                console.log(color.red);
-                console.log(color.green);
-                console.log(color.blue);
-                const xhr = new XMLHttpRequest();
-                xhr.open("POST", 'http://espressif/color');
-                xhr.setRequestHeader('Content-Type', 'text/plain; charset=UTF-8');
-                const body = color.red+','+color.green+','+color.blue;
-                console.log(body);
-    	        xhr.onload = () => {{
-	    	        if (xhr.readyState == 4 && xhr.status == 200) {{
-		                console.log('Ok');
-		            }} else {{
-		                console.log('Error!');
-                    }}
-	            }};
-	            xhr.send(body);	
+                $(red).val(color.red);
+                $(green).val(color.green);
+                $(blue).val(color.blue);
+
+                updateSettings();
             }});
+
+            $('#flash').change('change', function(){{
+                updateSettings();
+            }});
+            $('#transition').change('change', function(){{
+                updateSettings();
+            }});
+            $('#btnUpdateSettings').click(function(){{
+                updateSettings();
+            }});
+
+            function updateSettings() {{
+
+                let red = $('#red').val();
+                let green =$('#green').val();
+                let blue = $('#blue').val();
+
+                let delai = $('#delai').val();
+                let flash = $('#flash').prop('checked');
+                let transition = $('#transition').prop('checked');                
+
+                const json = {{'red':Number(red),'green':Number(green),'blue':Number(blue), 'mode': flash, 'delay':Number(delai), 'transition': transition}};
+
+                console.log(json);
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://espressif/settings');
+                //xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.setRequestHeader('Content-Type', 'text/plain; charset=UTF-8');
+                xhr.onload = () => {{
+                    if (xhr.status >= 200 && xhr.status < 300) {{
+                        const response = JSON.parse(xhr.responseText);
+                        console.log(response);
+                    }}
+                }};                
+                xhr.send(JSON.stringify(json));
+            }}
+
         </script>
     </body>
 </html>
@@ -250,6 +332,7 @@ fn templated(content: impl AsRef<str>) -> String {
     )
 }
 
+
 fn index_html() -> String {
-    templated("Hello from mcu!")
+    templated("Settings")
 }
